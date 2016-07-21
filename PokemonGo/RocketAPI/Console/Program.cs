@@ -1,4 +1,4 @@
-﻿#region
+#region
 
 using System;
 using System.Collections.Generic;
@@ -51,10 +51,9 @@ namespace PokemonGo.RocketAPI.Console
                 }
                 ;
 
-                System.Console.WriteLine("There is a new Version available: " + gitVersion);
-                System.Console.WriteLine("If you have any issues, go get it now.");
+                System.Console.WriteLine("There is a new Version available: " + gitVersion + " downloading.. ");
                 Thread.Sleep(1000);
-                //Process.Start("https://github.com/NecronomiconCoding/Pokemon-Go-Rocket-API");
+                Process.Start("https://github.com/NecronomiconCoding/Pokemon-Go-Rocket-API");
             }
             catch (Exception)
             {
@@ -92,7 +91,7 @@ namespace PokemonGo.RocketAPI.Console
                 do
                 {
                     evolvePokemonOutProto = await client.EvolvePokemon(pokemon.Id);
-                        //todo: someone check whether this still works
+                    //todo: someone check whether this still works
 
                     if (evolvePokemonOutProto.Result == 1)
                     {
@@ -108,7 +107,6 @@ namespace PokemonGo.RocketAPI.Console
                         /*
                         System.Console.WriteLine($"Failed to evolve {pokemon.PokemonId}. " +
                                                  $"EvolvePokemonOutProto.Result was {result}");
-
                         System.Console.WriteLine($"Due to above error, stopping evolving {pokemon.PokemonId}");
                         */
                     }
@@ -137,6 +135,23 @@ namespace PokemonGo.RocketAPI.Console
                 var settings = await client.GetSettings();
                 var mapObjects = await client.GetMapObjects();
                 var inventory = await client.GetInventory();
+                var pokemons =
+                    inventory.InventoryDelta.InventoryItems.Select(i => i.InventoryItemData?.Pokemon)
+                        .Where(p => p != null && p?.PokemonId > 0);
+
+                if (ClientSettings.TransferType == "leaveStrongest")
+                    await TransferAllButStrongestUnwantedPokemon(client);
+                else if (ClientSettings.TransferType == "all")
+                    await TransferAllGivenPokemons(client, pokemons);
+                else if (ClientSettings.TransferType == "duplicate")
+                    await TransferDuplicatePokemon(client);
+                else if (ClientSettings.TransferType == "cp")
+                    await TransferAllWeakPokemon(client, ClientSettings.TransferCPThreshold);
+                else
+                    System.Console.WriteLine("Transfering pokemon disabled");
+                if (ClientSettings.EvolveAllGivenPokemons)
+                    await EvolveAllGivenPokemons(client, pokemons);
+
 
                 await ExecuteFarmingPokestopsAndPokemons(client);
             }
@@ -146,29 +161,6 @@ namespace PokemonGo.RocketAPI.Console
             catch (NullReferenceException nre) { System.Console.WriteLine("Null Refference - Restarting"); Execute(); }
 
             //await ExecuteCatchAllNearbyPokemons(client);
-        }
-
-        private static async Task EvolveAndTransfer(Client client)
-        {
-            var inventory = await client.GetInventory();
-            var pokemons =
-                    inventory.InventoryDelta.InventoryItems.Select(i => i.InventoryItemData?.Pokemon)
-                        .Where(p => p != null && p?.PokemonId > 0);
-
-            if (ClientSettings.EvolveAllGivenPokemons)
-                await EvolveAllGivenPokemons(client, pokemons);
-
-            if (ClientSettings.TransferType == "leaveStrongest")
-                await TransferAllButStrongestUnwantedPokemon(client);
-            else if (ClientSettings.TransferType == "all")
-                await TransferAllGivenPokemons(client, pokemons);
-            else if (ClientSettings.TransferType == "duplicate")
-                await TransferDuplicatePokemon(client);
-            else if (ClientSettings.TransferType == "cp")
-                await TransferAllWeakPokemon(client, ClientSettings.TransferCPThreshold);
-            else
-                System.Console.WriteLine("Transfering pokemon disabled");
-            
         }
 
         private static async Task ExecuteCatchAllNearbyPokemons(Client client)
@@ -187,16 +179,18 @@ namespace PokemonGo.RocketAPI.Console
                 {
                     caughtPokemonResponse =
                         await
-                            client.CatchPokemon(pokemon.EncounterId, pokemon.SpawnpointId, pokemon.Latitude,
-                                pokemon.Longitude, MiscEnums.Item.ITEM_POKE_BALL, pokemonCP);
+                            client.CatchPokemon(pokemon.EncounterId, pokemon.SpawnpointId, pokemon.Latitude,                               
+                    pokemon.Longitude, MiscEnums.Item.ITEM_POKE_BALL, pokemonCP);
                     ; //note: reverted from settings because this should not be part of settings but part of logic
                 } while (caughtPokemonResponse.Status == CatchPokemonResponse.Types.CatchStatus.CatchMissed);
                 System.Console.WriteLine(caughtPokemonResponse.Status ==
-                                         CatchPokemonResponse.Types.CatchStatus.CatchSuccess
-                    ? $"[{DateTime.Now.ToString("HH:mm:ss")}] We caught a {pokemon.PokemonId} with CP {pokemonCP}"
-                    : $"[{DateTime.Now.ToString("HH:mm:ss")}] {pokemon.PokemonId} with CP {pokemonCP} got away..");
+                                         CatchPokemonResponse.Types.CatchStatus.CatchSuccess               
+                ? $"[{DateTime.Now.ToString("HH:mm:ss")}] We caught a {pokemon.PokemonId} with CP {pokemonCP}"
+                     : $"[{DateTime.Now.ToString("HH:mm:ss")}] {pokemon.PokemonId} with CP {pokemonCP} got away..");
+                await Task.Delay(5000);
 
-                await Task.Delay(3500);
+
+                await Task.Delay(5000);
             }
         }
 
@@ -213,6 +207,7 @@ namespace PokemonGo.RocketAPI.Console
 
             foreach (var pokeStop in pokeStops)
             {
+                //System.Console.WriteLine(++counter + " pokeStop");
                 var update = await client.UpdatePlayerLocation(pokeStop.Latitude, pokeStop.Longitude);
                 var fortInfo = await client.GetFort(pokeStop.Id, pokeStop.Latitude, pokeStop.Longitude);
                 var fortSearch = await client.SearchFort(pokeStop.Id, pokeStop.Latitude, pokeStop.Longitude);
@@ -220,10 +215,8 @@ namespace PokemonGo.RocketAPI.Console
                 System.Console.WriteLine(
                     $"[{DateTime.Now.ToString("HH:mm:ss")}] Farmed XP: {fortSearch.ExperienceAwarded}, Gems: {fortSearch.GemsAwarded}, Eggs: {fortSearch.PokemonDataEgg} Items: {GetFriendlyItemsString(fortSearch.ItemsAwarded)}");
 
-                await Task.Delay(4000);
+                await Task.Delay(15000);
                 await ExecuteCatchAllNearbyPokemons(client);
-                await Task.Delay(6000);
-                await EvolveAndTransfer(client);
             }
         }
 
@@ -236,7 +229,7 @@ namespace PokemonGo.RocketAPI.Console
 
             return
                 enumerable.GroupBy(i => i.ItemId)
-                    .Select(kvp => new {ItemName = kvp.Key.ToString(), Amount = kvp.Sum(x => x.ItemCount)})
+                    .Select(kvp => new { ItemName = kvp.Key.ToString(), Amount = kvp.Sum(x => x.ItemCount) })
                     .Select(y => $"{y.Amount} x {y.ItemName}")
                     .Aggregate((a, b) => $"{a}, {b}");
         }
@@ -265,29 +258,38 @@ namespace PokemonGo.RocketAPI.Console
 
         private static async Task TransferAllButStrongestUnwantedPokemon(Client client)
         {
-            //System.Console.WriteLine("[!] firing up the meat grinder");
+            System.Console.WriteLine("[!] firing up the meat grinder");
 
             var unwantedPokemonTypes = new[]
             {
-                PokemonId.Pidgey,
                 PokemonId.Rattata,
-                PokemonId.Weedle,
-                PokemonId.Zubat,
-                PokemonId.Caterpie,
-                PokemonId.Pidgeotto,
-                PokemonId.NidoranFemale,
-                PokemonId.Paras,
-                PokemonId.Venonat,
-                PokemonId.Psyduck,
-                PokemonId.Poliwag,
-                PokemonId.Slowpoke,
-                PokemonId.Drowzee,
-                PokemonId.Gastly,
-                PokemonId.Goldeen,
-                PokemonId.Staryu,
-                PokemonId.Magikarp,
-                PokemonId.Eevee,
-                PokemonId.Dratini
+PokemonId.Weedle,
+PokemonId.Zubat,
+PokemonId.Caterpie,
+PokemonId.Pidgeotto,
+PokemonId.Paras,
+PokemonId.Venonat,
+PokemonId.Psyduck,
+PokemonId.Poliwag,
+PokemonId.Slowpoke,
+PokemonId.Drowzee,
+PokemonId.Gastly,
+PokemonId.Goldeen,
+PokemonId.Staryu,
+PokemonId.Magikarp,
+PokemonId.Dratini,
+PokemonId.Voltorb,
+PokemonId.Magnemite,
+PokemonId.Sandshrew,
+PokemonId.Abra,
+PokemonId.Machop,
+PokemonId.Bellsprout,
+PokemonId.Tentacool,
+PokemonId.Doduo,
+PokemonId.Shellder,
+PokemonId.Krabby,
+PokemonId.Exeggcute,
+PokemonId.Pinsir
             };
 
             var inventory = await client.GetInventory();
@@ -305,14 +307,12 @@ namespace PokemonGo.RocketAPI.Console
                 var unwantedPokemon =
                     pokemonOfDesiredType.Skip(1) // keep the strongest one for potential battle-evolving
                         .ToList();
-                if (unwantedPokemon.Count > 0)
-                {
-                    System.Console.WriteLine($"Grinding {unwantedPokemon.Count} pokemons of type {unwantedPokemonType}");
-                    await TransferAllGivenPokemons(client, unwantedPokemon);
-                }
+
+                System.Console.WriteLine($"Grinding {unwantedPokemon.Count} pokemons of type {unwantedPokemonType}");
+                await TransferAllGivenPokemons(client, unwantedPokemon);
             }
 
-            //System.Console.WriteLine("[!] finished grinding all the meat");
+            System.Console.WriteLine("[!] finished grinding all the meat");
         }
 
         private static async Task TransferAllGivenPokemons(Client client, IEnumerable<PokemonData> unwantedPokemons)
@@ -349,16 +349,16 @@ namespace PokemonGo.RocketAPI.Console
         private static async Task TransferDuplicatePokemon(Client client)
         {
             checkForDuplicates++;
-            if (checkForDuplicates%2 == 0)
+            if (checkForDuplicates % 50 == 0)
             {
                 checkForDuplicates = 0;
-                //System.Console.WriteLine($"Check for duplicates");
+                System.Console.WriteLine($"Check for duplicates");
                 var inventory = await client.GetInventory();
                 var allpokemons =
                     inventory.InventoryDelta.InventoryItems.Select(i => i.InventoryItemData?.Pokemon)
                         .Where(p => p != null && p?.PokemonId > 0);
 
-                var dupes = allpokemons.OrderBy(x => x.Cp).Select((x, i) => new {index = i, value = x})
+                var dupes = allpokemons.OrderBy(x => x.Cp).Select((x, i) => new { index = i, value = x })
                     .GroupBy(x => x.value.PokemonId)
                     .Where(x => x.Skip(1).Any());
 
@@ -377,7 +377,7 @@ namespace PokemonGo.RocketAPI.Console
 
         private static async Task TransferAllWeakPokemon(Client client, int cpThreshold)
         {
-            //System.Console.WriteLine("[!] firing up the meat grinder");
+            System.Console.WriteLine("[!] firing up the meat grinder");
 
             var doNotTransfer = new[] //these will not be transferred even when below the CP threshold
             {
@@ -416,14 +416,12 @@ namespace PokemonGo.RocketAPI.Console
 
                 //var unwantedPokemon = pokemonOfDesiredType.Skip(1) // keep the strongest one for potential battle-evolving
                 //                                          .ToList();
-                if (pokemonToDiscard.Count > 0)
-                {
-                    System.Console.WriteLine($"Grinding {pokemonToDiscard.Count} pokemon below {cpThreshold} CP.");
-                    await TransferAllGivenPokemons(client, pokemonToDiscard);
-                }
+                System.Console.WriteLine($"Grinding {pokemonToDiscard.Count} pokemon below {cpThreshold} CP.");
+                await TransferAllGivenPokemons(client, pokemonToDiscard);
+
             }
 
-            //System.Console.WriteLine("[!] finished grinding all the meat");
+            System.Console.WriteLine("[!] finished grinding all the meat");
         }
     }
 }
