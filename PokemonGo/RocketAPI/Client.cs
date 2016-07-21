@@ -1,4 +1,4 @@
-﻿#region
+#region
 
 using System;
 using System.Linq;
@@ -55,7 +55,7 @@ namespace PokemonGo.RocketAPI
             var customRequest = new Request.Types.CatchPokemonRequest
             {
                 EncounterId = encounterId,
-                Pokeball = (int) GetBestBall(pokemonCP).Result,
+                Pokeball = (int)GetBestBall(pokemonCP).Result,
                 SpawnPointGuid = spawnPointGuid,
                 HitPokemon = 1,
                 NormalizedReticleSize = Utils.FloatAsUlong(1.950),
@@ -159,7 +159,6 @@ namespace PokemonGo.RocketAPI
             var masterBallsCount = ballCollection.Where(p => p.ItemId == MiscEnums.Item.ITEM_MASTER_BALL).
                 DefaultIfEmpty(new {ItemId = MiscEnums.Item.ITEM_MASTER_BALL, Amount = 0}).FirstOrDefault().Amount;
 
-            // Use better balls for high CP pokemon
             if (masterBallsCount > 0 && pokemonCP >= 1000)
                 return MiscEnums.Item.ITEM_MASTER_BALL;
 
@@ -180,6 +179,12 @@ namespace PokemonGo.RocketAPI
                 return MiscEnums.Item.ITEM_MASTER_BALL;
 
             return MiscEnums.Item.ITEM_POKE_BALL;
+
+        }
+
+        public Task<CatchPokemonResponse> CatchPokemon(ulong encounterId, string spawnpointId, double latitude, double longitude, MiscEnums.Item iTEM_POKE_BALL)
+        {
+            throw new NotImplementedException();
         }
 
         public async Task<FortDetailsResponse> GetFort(string fortId, double fortLat, double fortLng)
